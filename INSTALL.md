@@ -6,58 +6,80 @@ This guide walks you through installing and configuring the Outbound Feed Monito
 
 ## Prerequisites
 
-Before you begin, make sure you have:
-
 1. **Claude Code** installed and running
-2. **MCP connectors** enabled for:
-   - **Gmail** — to read feed report emails from your inbox or the shared DE inbox
-   - **Slack** — to post alerts to #dataeng-support and DM you summaries
-   - **Atlassian (Jira)** — to create tickets on the DT board
-3. **Jira access** to your team's Atlassian instance
-4. **Feed report emails** in your Gmail — you need access to the automated pipeline emails from your account's sender
+2. **Python 3.11+** — verify with `python --version`
+3. **MCP connectors** enabled for:
+   - **Gmail** — to read feed report emails
+   - **Slack** — to post alerts and DM summaries
+   - **Atlassian (Jira)** — to create tickets (optional — can add later)
+4. **Feed report emails** in your Gmail — you need access to the automated pipeline emails
+5. **`credentials.json`** for Gmail OAuth — see setup path below
 
 ---
 
-## Step 1: Clone the Repo
+## Gmail OAuth Setup (two paths)
 
-```bash
-git clone https://github.com/flyshadow-glitch/outbound-feed-monitor.git
-cd outbound-feed-monitor
-```
+The Python CLI reads email bodies directly via the Gmail API (the MCP connector's body retrieval has a known bug). This requires a one-time OAuth setup.
+
+### Path A: You already have `credentials.json` from your team (most users)
+
+Your team admin has already created the Google Cloud project. You just need the shared `credentials.json` file.
+
+1. Get `credentials.json` from your team lead or shared drive
+2. Place it in the repo root (after cloning in Step 1)
+3. On first CLI run, a browser window opens — sign in with your Google account
+4. Done. A `token.json` is saved locally and auto-refreshes. No re-auth needed.
+
+### Path B: You're setting up from scratch (admin / first-time team setup)
+
+Follow the full [Google Cloud Setup guide in README.md](README.md#1-google-cloud-setup-gmail-oauth) to create a project and download `credentials.json`. This takes ~5 minutes and only needs to happen **once per team**. Share the resulting `credentials.json` with your team so they can use Path A.
+
+> **Security note:** `credentials.json` and `token.json` are in `.gitignore`. Never commit them. `credentials.json` is an app credential (safe to share within your team). `token.json` is your personal auth token (do not share).
 
 ---
 
-## Step 2: Install the Python CLI
-
-Install the Python dependencies and register the `outbound-feed-monitor` CLI command:
+## Step 1: Install the CLI
 
 ```bash
-pip install -e .
+pip install git+https://github.com/flyshadow-glitch/outbound-feed-monitor.git
 ```
 
-This installs the package in editable mode and adds `outbound-feed-monitor` as a system-level command. After this, you can call it from anywhere:
+This installs the `outbound-feed-monitor` command system-wide. After this, you can call it from anywhere:
 
 ```bash
 outbound-feed-monitor --account myaccount --json
 ```
 
-> **Note:** Requires Python 3.11+. You can verify with `python --version`.
+> **For contributors / development:** clone the repo and use `pip install -e .` instead for editable mode.
 
-> **OAuth credentials:** On first run, Gmail OAuth will open a browser window to authenticate. After that, credentials are cached in `credentials.json` and `token.json` in the project root — no re-auth required for scheduled runs.
+---
+
+## Step 2: Set Up Your Working Directory
+
+Create a directory for your config files and place `credentials.json` in it:
+
+```bash
+mkdir outbound-feed-monitor && cd outbound-feed-monitor
+# Place credentials.json here (from Path A or B above)
+```
+
+On first CLI run, the browser will open for Google auth. After that, `token.json` is created automatically.
 
 ---
 
 ## Step 3: Install the Skill
 
-Copy the `skill/` directory to your Claude Code skills location.
+Clone the repo (or just the `skill/` folder) and copy it to your Claude Code skills location:
 
 **Windows:**
 ```bash
+git clone https://github.com/flyshadow-glitch/outbound-feed-monitor.git
 xcopy /E /I "outbound-feed-monitor\skill" "%APPDATA%\Claude\skills\outbound-feed-monitor"
 ```
 
 **Mac/Linux:**
 ```bash
+git clone https://github.com/flyshadow-glitch/outbound-feed-monitor.git
 cp -r outbound-feed-monitor/skill ~/.claude/skills/outbound-feed-monitor
 ```
 

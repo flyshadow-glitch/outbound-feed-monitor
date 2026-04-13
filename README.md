@@ -31,11 +31,15 @@ The CLI below is the original Phase 1 implementation. It handles email parsing a
 
 - Python 3.11+
 - A Google account that receives the feed report emails
-- A Google Cloud project (for Gmail OAuth) — setup takes ~5 minutes
+- A `credentials.json` file for Gmail OAuth (see below)
 
 ---
 
 ## 1. Google Cloud Setup (Gmail OAuth)
+
+> **Most users skip this section.** If your team already has a `credentials.json` file, just place it in your working directory and run the CLI — a browser window will open for you to sign in. See [INSTALL.md](INSTALL.md) Path A.
+>
+> This section is for the **admin who creates the Google Cloud project the first time**. It only needs to happen once per team. Share the resulting `credentials.json` with your teammates.
 
 You need a `credentials.json` file to authenticate with Gmail.
 
