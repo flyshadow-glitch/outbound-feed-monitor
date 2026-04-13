@@ -1,0 +1,85 @@
+# Outbound Feed Monitor — Account Configuration
+#
+# Copy this file to accounts.yaml and fill in your account details.
+# accounts.yaml is gitignored and will not be committed.
+#
+# The Claude skill onboarding flow (/outbound-feed-monitor) will
+# populate this file automatically during first-time setup.
+
+accounts:
+  # Short account key used as the trigger (e.g. "acme")
+  your_account:
+    account_name: "Client - Account Name"
+    brand: "Brand Name"
+    email_subject: "Subject line of the feed report email"
+    sender_email: "pipeline-sender@example.com"
+    cadence_day: Monday
+    expected_email_count: 3
+
+    # Jira required fields — collected during onboarding
+    # CST: your organization's team name
+    cst: "Your Team"
+    cst_option_id: ""
+    # Client must match Jira dropdown exactly
+    client: "Client Name"
+    client_option_id: ""
+    billing_code_nonpld: "TBD"
+    billing_code_pld: "TBD"
+
+    # Epic mapping — the skill searches for these on the DT board during onboarding
+    # Pattern: "<Client> - <Brand> - Non PLD - Maintenance"
+    epics:
+      nonpld:
+        key: ""
+        summary: ""
+      pld:
+        key: ""
+        summary: ""
+
+    feed_types:
+      - name: "Media (Non-PLD)"
+        stream: "Non-PLD"
+        file_patterns: ["_GA_", "_BING_", "_DCM_"]
+        table_patterns: ["google_ads", "bing_ads", "dcm"]
+        channel_labels:
+          dcm: "DCM"
+          google_ads: "GA"
+          bing_ads: "Bing"
+        notes: ""
+      - name: "PLD"
+        stream: "PLD"
+        file_patterns: ["_PLD_"]
+        table_patterns: ["pld"]
+        channel_labels:
+          pld: "PLD"
+        notes: ""
+
+    known_exceptions: []
+    # Example exception:
+    # - source_table: some_vendor_table
+    #   condition: "Failed OR 0 rows"
+    #   severity: INFO
+    #   reason: "This table returns 0 rows when no active campaign is running."
+    #   action_note: "Check with media team if the campaign source is active this week."
+
+    slack:
+      production_channel_id: ""       # Resolve via slack_search_channels during setup
+      production_channel: "#your-alert-channel"
+      test_user_id: ""                # Your Slack user ID for DMs
+
+    jira:
+      production_project_key: DT
+      test_project_key: ""            # Your own board for testing
+      cloud_id: ""                    # Your Jira cloud ID
+      instance: your-instance.atlassian.net
+      issue_type: Data Issue
+      issue_type_id: "10019"
+      issue_source: Media Vendor
+      issue_source_option_id: "11249"
+      labels: ["client-shortname", "account-shortname", "outbound-feed"]
+      default_priority: Medium
+
+    estimate:
+      single_feed: "4h"
+      two_to_three_feeds: "6h"
+      four_plus_feeds: "8h"
