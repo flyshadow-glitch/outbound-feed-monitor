@@ -282,7 +282,7 @@ outbound-feed-monitor/
 | Claude Skill — onboarding flow | Done |
 | Claude Skill — Jira ticket creation (DT board, full field mapping) | Done |
 | Claude Skill — Slack alerts (channel + thread reply) | Done |
-| Claude Skill — scheduled Monday runs | Done |
+| Claude Skill — scheduled runs (day/time configurable) | Done |
 | `setup.py` CLI onboarding | Planned |
 | Multi-account simultaneous monitoring | Planned |
 | Billing code auto-sync with Genome | Planned |
@@ -300,5 +300,5 @@ Delete `token.json` and re-run. A browser window will open for you to sign in ag
 **`Account 'xyz' not found in accounts.yaml`**
 Check that your `--account` value matches a key in `config/accounts.yaml`.
 
-**Found 0 emails on a Monday**
+**Found 0 emails on the expected cadence day**
 Check that you're authenticated with the correct Google account (the one that receives the feed emails). Verify by searching Gmail for the expected subject line from your `accounts.yaml` config.

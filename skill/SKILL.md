@@ -41,9 +41,9 @@ recurring schedule (day and time are configurable during onboarding).
 ### Command routing
 
 On invocation, determine intent from the command/message:
-- Contains **"setup"** → Run onboarding Steps 0A–0B + save config. Do NOT run Steps 1–8. Tell user: "Config saved. Run `/outbound-feed-monitor account:<name>` when you're ready to check."
-- Contains **"reset"** → Delete `references/user-config.md` + stable path config. Then run onboarding. Do NOT auto-run check.
-- Contains **"add"** → Jump to Step 0D (account definition). Skip MCP checks (already verified). Ask Q1 only, then Q2–Q4 with defaults from existing config.
+- Contains **"setup"** → Run full onboarding (Steps 0A–0D) + save config. Do NOT run Steps 1–8. Tell user: "Config saved. Run `/outbound-feed-monitor account:<name>` when you're ready to check."
+- Contains **"reset"** → Delete `references/user-config.md`, `references/account-configs.md`, and stable path copies. Then run full onboarding (Steps 0A–0D). Do NOT auto-run check.
+- Contains **"add"** → Ask Q1 (email subject) which triggers Step 0D (account definition from sample email), then Q2–Q4 with defaults from existing config. Skip MCP checks (Step 0A) — already verified.
 - Contains **"status"** → Jump to Status Display (see below).
 - Contains **"pause"** → Jump to Schedule Management: pause.
 - Contains **"resume"** → Jump to Schedule Management: resume.
@@ -171,7 +171,7 @@ schedules:
 ```
 
 **One-time fields (never re-asked after onboarding):** `slack_target`, `slack_mode`,
-`billing_code_nonpld`, `billing_code_pld`, `cst`, `jira_project_key`, `config_dir`, `cli_path`.
+`billing_code_nonpld`, `billing_code_pld`, `cst`, `client`, `jira_project_key`, `config_dir`, `cli_path`.
 Per-account schedules are stored under `schedules.<shortname>`.
 Only surface these again if the user says "reconfigure" or "update billing codes".
 
@@ -240,10 +240,10 @@ This step is triggered by Step 0B question 1 (the user provides the email subjec
   - "Save for later" → Stop here. Config is saved and schedule is set.
 
 **Adding additional accounts later:** When a user says `/outbound-feed-monitor add`, "add account",
-or runs the skill with an unknown account name, jump directly to Step 0D then ask only
-questions 2–4 from Step 0B (Slack, Jira, schedule) — reuse existing values as defaults but let
-the user change them (a different account may route to a different Slack channel or use a different
-billing code).
+or runs the skill with an unknown account name: ask Q1 (email subject) which triggers Step 0D
+(account detection from sample email), then ask Q2–Q4 (Slack, Jira, schedule) — reuse existing
+values as defaults but let the user change them (a different account may route to a different
+Slack channel or use a different billing code). Skip MCP checks (Step 0A) since already verified.
 
 ---
 
@@ -448,7 +448,9 @@ createJiraIssue(
 
 **Due date — Friday of the current week:** Compute as `today + (4 - today.weekday())` days,
 where Monday = 0 and Friday = 4. Example: if today is Monday 2026-04-14, due date = 2026-04-18.
-Do NOT use "today + 5 days" — that produces Saturday when the check runs on a Monday.
+**Weekend guard:** If `(4 - today.weekday())` is negative (Saturday = -1, Sunday = -2), add 7
+to get **next** Friday instead of a past date. Do NOT use "today + 5 days" — that produces
+Saturday when the check runs on a Monday.
 
 **CST and Client option IDs** are stored in account-configs.md after first lookup.
 If not cached, call `getJiraIssueTypeMetaWithFields` with `projectIdOrKey: "DT"` and `issueTypeId: "10019"`
@@ -565,7 +567,9 @@ When the user runs `/outbound-feed-monitor resume [account]`:
 When the user runs `/outbound-feed-monitor remove <account>`:
 1. Confirm: "This will remove <account> from monitoring and disable its schedule. Continue?"
 2. If confirmed:
-   - Disable the scheduled task (if exists): `update_scheduled_task` with `enabled: false`
+   - Disable the scheduled task (if exists): `update_scheduled_task` with `enabled: false`.
+     Note: the task remains in the task list (disabled) since there is no delete-task API.
+     Orphaned disabled tasks are harmless and are cleaned up by `/outbound-feed-monitor uninstall`.
    - Remove the account block from `references/account-configs.md`
    - Remove the account shortname from `accounts` list in `references/user-config.md`
    - Save both files to stable path and session cache
@@ -592,7 +596,7 @@ To fully remove the Outbound Feed Monitor:
    pip uninstall outbound-feed-monitor
 
 3. Remove the skill folder:
-   - Windows: del /s "%APPDATA%\Claude\skills\outbound-feed-monitor"
+   - Windows: rmdir /s /q "%APPDATA%\Claude\skills\outbound-feed-monitor"
    - Mac/Linux: rm -rf ~/.claude/skills/outbound-feed-monitor
 
 4. Remove your config directory (optional — keeps your credentials.json):

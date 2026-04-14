@@ -139,7 +139,7 @@ Tickets are created with:
 - **Issue type:** Data Issue
 - **Epic:** Auto-matched based on your account + brand + PLD/Non-PLD
 - **Labels:** client shortname, account shortname, `outbound-feed`
-- **Start date:** Monday of detection
+- **Start date:** Day of detection
 - **Due date:** Friday of the same week
 - **Original estimate:** 4h (single feed), 6h (2-3 feeds), 8h (4+ feeds)
 - **Assignee:** Unassigned — DE lead triages from the board
@@ -158,10 +158,10 @@ Tickets are created with:
 To monitor additional client accounts, run:
 
 ```
-/outbound-feed-monitor
+/outbound-feed-monitor add
 ```
 
-Choose "Add new account" during onboarding and provide the new account's details. Each account gets its own schedule and config.
+The skill will ask for the new account's email subject line, auto-detect feed types from a sample email, then let you configure Slack, Jira, and scheduling. Each account gets its own schedule and config.
 
 ---
 

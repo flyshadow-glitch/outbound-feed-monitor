@@ -28,7 +28,9 @@ expected_email_count: [How many emails expected per cadence run]
 
 # Jira required fields — collected during onboarding
 cst:                  [Team name — select from your organization's team list]
+cst_option_id:        [Jira select option ID for CST — resolved during onboarding via getJiraIssueTypeMetaWithFields]
 client:               [Client name — must match Jira dropdown exactly]
+client_option_id:     [Jira select option ID for Client — resolved during onboarding via getJiraIssueTypeMetaWithFields]
 billing_code_nonpld:  [Annual project code for Non-PLD maintenance — confirm with DE lead/PM, or "TBD"]
 billing_code_pld:     [Annual project code for PLD maintenance — confirm with DE lead/PM, or "TBD"]
 
