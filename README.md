@@ -6,7 +6,7 @@ Monitors client outbound feed pipeline emails and alerts the team on failures â€
 
 | Mode | What it does | Who it's for |
 |---|---|---|
-| **Claude Skill** (recommended) | Scheduled Monday checks via Claude Code. Auto-creates Jira tickets, posts Slack alerts, DMs you a summary. | Any analyst or DE team member with Claude Code |
+| **Claude Skill** (recommended) | Scheduled checks via Claude Code (day/time configurable). Auto-creates Jira tickets, posts Slack alerts, DMs you a summary. | Any analyst or DE team member with Claude Code |
 | **Python CLI** (fallback) | Run feed checks from the terminal. Rich output, no Jira/Slack. | CI/CD, debugging, or when Claude Code is unavailable |
 
 ## Quick Start (Claude Skill)
@@ -17,7 +17,7 @@ See **[INSTALL.md](INSTALL.md)** for the full installation and onboarding guide.
 /outbound-feed-monitor
 ```
 
-The skill walks you through setup in ~5 minutes. Once configured, it runs every Monday morning with zero manual intervention.
+The skill walks you through setup in ~5 minutes. Once configured, it runs automatically on your chosen schedule with zero manual intervention.
 
 ---
 

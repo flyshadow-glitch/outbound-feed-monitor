@@ -36,8 +36,8 @@ The <ACCOUNT> outbound feed export failed on <DATE> (<DAY OF WEEK>).
 
 ## Workflow Context
 **Analytics (owner):**
-- Detected the issue via automated Monday morning feed check
-- Created this Jira ticket and posted the alert to #dataeng-support
+- Detected the issue via automated outbound feed check (Claude Code scheduled task)
+- Created this Jira ticket and posted the alert to <slack_channel>
 - Leads all communication with the client data team on status and ETA
 - Performs QA on backfilled data before it is sent to the client
 

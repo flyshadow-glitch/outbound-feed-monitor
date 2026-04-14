@@ -127,7 +127,7 @@ The skill will:
 
 ## What Happens on a Scheduled Run
 
-Once scheduled, the skill runs automatically every Monday morning:
+Once scheduled, the skill runs automatically at your configured day and time:
 
 - **Failures detected** — creates a consolidated Jira ticket under the correct epic (PLD or Non-PLD Maintenance), posts a Slack message to #dataeng-support with a thread reply linking the ticket
 - **No failures** — sends you a private Slack DM. No channel noise.

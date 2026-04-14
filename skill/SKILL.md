@@ -13,7 +13,7 @@ description: >
 
 A self-service skill for monitoring client outbound feed pipeline emails. Any analyst or DE team member
 can install this skill, configure their accounts and alert targets, and run checks on-demand or on a
-Monday morning schedule.
+recurring schedule (day and time are configurable during onboarding).
 
 **Trigger command:** `/outbound-feed-monitor account:<name>` or any phrase matching the description above.
 
@@ -375,13 +375,17 @@ createJiraIssue(
     "customfield_10038": "<billing_code>",                 # Project Code (text)
     "customfield_10045": {"id": "11249"},                  # Issue Source: Media Vendor
     "customfield_10015": "<today YYYY-MM-DD>",             # Start date
-    "customfield_10535": "<friday YYYY-MM-DD>",            # Expected Delivery Date
+    "customfield_10535": "<friday YYYY-MM-DD>",            # Expected Delivery Date (Friday of current week)
     "parent": {"key": "<epic_key>"},                       # Non-PLD or PLD epic from config
     "labels": ["<client-shortname>", "<account-shortname>", "outbound-feed"],
     "priority": {"name": "Medium"}
   }
 )
 ```
+
+**Due date — Friday of the current week:** Compute as `today + (4 - today.weekday())` days,
+where Monday = 0 and Friday = 4. Example: if today is Monday 2026-04-14, due date = 2026-04-18.
+Do NOT use "today + 5 days" — that produces Saturday when the check runs on a Monday.
 
 **CST and Client option IDs** are stored in account-configs.md after first lookup.
 If not cached, call `getJiraIssueTypeMetaWithFields` with `projectIdOrKey: "DT"` and `issueTypeId: "10019"`
@@ -404,7 +408,8 @@ When the user opts into scheduling during onboarding or says "schedule this":
 
 Use `create_scheduled_task` with:
 - **taskId:** `feed-check-<account_shortname>`
-- **cronExpression:** `"0 9 * * 1"` (Monday 9 AM local time, adjustable)
+- **cronExpression:** Derived from the user's answer to question 4 (e.g., `"0 9 * * 1"` = Monday 9 AM,
+  `"0 11 * * 1"` = Monday 11 AM, `"0 8 * * 2"` = Tuesday 8 AM). Convert natural language to cron.
 - **prompt:** A complete prompt that runs the feed check:
 
 ```
@@ -425,8 +430,8 @@ CLI path: <cli_path>
 5. Post summary to chat.
 ```
 
-Tell the user: "Scheduled! Feed check will run every Monday at 9:00 AM ET.
-You can also run it anytime with '/check-outbound-feeds account:<name>'."
+Tell the user: "Scheduled! Feed check will run at your configured time (<day> <time>).
+You can also run it anytime with '/outbound-feed-monitor account:<name>'."
 
 ---
 
@@ -442,7 +447,7 @@ Info: [known exceptions noted with action_note, or "None"]
 
 Slack alert: [channel/DM posted] ✓  (or "skipped — connector not available")
 Jira ticket: [KEY-XXX link] ✓  (or "comment added to existing" or "skipped")
-Schedule:    [Monday 9 AM ET] ✓  (or "not scheduled")
+Schedule:    [<day> <time>] ✓  (or "not scheduled")
 ```
 
 ---
