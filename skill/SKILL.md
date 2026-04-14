@@ -6,6 +6,7 @@ description: >
   'did the outbound feeds run', '[account] outbound status', or any variation asking about outbound feed
   report emails for any client account. Also trigger for 'did all feed emails arrive', 'any feed failures
   today', 'check <account> feeds', 'set up feed monitoring', 'schedule feed check',
+  'outbound-feed-monitor setup', 'outbound-feed-monitor reset',
   or similar account-specific feed check and onboarding requests.
 ---
 
@@ -138,6 +139,15 @@ On every invocation, check for existing config in this order:
 
 If a config is found in either location, load it silently and copy to both locations if one is missing.
 Only ask for inputs that are missing or if the user explicitly says "reconfigure" or "change settings".
+
+**Force onboarding (testing / fresh install):** If the user runs `/outbound-feed-monitor setup`
+or `/outbound-feed-monitor reset`, ignore any existing config and restart from Step 0A.
+Also delete `references/user-config.md` from the skill folder so the next session also starts clean.
+Tell the user: "Config cleared. Starting fresh onboarding..."
+
+**To manually reset between test runs:** Delete the file at:
+- Windows: `%APPDATA%\Claude\skills\outbound-feed-monitor\references\user-config.md`
+- Mac/Linux: `~/.claude/skills/outbound-feed-monitor/references/user-config.md`
 
 **Jira token expiry check:** If `jira_enabled = true` and `jira_token_created` is set,
 calculate the age of the token. If older than 335 days (30-day warning window before 365-day max):
