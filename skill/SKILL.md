@@ -7,7 +7,10 @@ description: >
   report emails for any client account. Also trigger for 'did all feed emails arrive', 'any feed failures
   today', 'check <account> feeds', 'set up feed monitoring', 'schedule feed check',
   'outbound-feed-monitor setup', 'outbound-feed-monitor reset',
-  or similar account-specific feed check and onboarding requests.
+  'outbound-feed-monitor add', 'outbound-feed-monitor status',
+  'outbound-feed-monitor pause', 'outbound-feed-monitor resume',
+  'outbound-feed-monitor remove',
+  or similar account-specific feed check, onboarding, and management requests.
 ---
 
 # Outbound Feed Monitor
@@ -17,6 +20,37 @@ can install this skill, configure their accounts and alert targets, and run chec
 recurring schedule (day and time are configurable during onboarding).
 
 **Trigger command:** `/outbound-feed-monitor account:<name>` or any phrase matching the description above.
+
+---
+
+## Lifecycle Commands
+
+| Command | What it does |
+|---|---|
+| `/outbound-feed-monitor` | Run feed check (onboards if first time) |
+| `/outbound-feed-monitor account:<name>` | Run check for a specific account |
+| `/outbound-feed-monitor setup` | Configure only — run onboarding without executing a check |
+| `/outbound-feed-monitor reset` | Clear all config and restart onboarding from scratch |
+| `/outbound-feed-monitor add` | Add a new account to an existing config |
+| `/outbound-feed-monitor status` | Show configured accounts, schedules, and last run info |
+| `/outbound-feed-monitor pause [account]` | Disable the scheduled task for an account |
+| `/outbound-feed-monitor resume [account]` | Re-enable a paused scheduled task |
+| `/outbound-feed-monitor remove <account>` | Remove an account from monitoring and disable its schedule |
+| `/outbound-feed-monitor uninstall` | Show cleanup steps to fully remove the skill |
+
+### Command routing
+
+On invocation, determine intent from the command/message:
+- Contains **"setup"** → Run onboarding Steps 0A–0B + save config. Do NOT run Steps 1–8. Tell user: "Config saved. Run `/outbound-feed-monitor account:<name>` when you're ready to check."
+- Contains **"reset"** → Delete `references/user-config.md` + stable path config. Then run onboarding. Do NOT auto-run check.
+- Contains **"add"** → Jump to Step 0D (account definition). Skip MCP checks (already verified). Ask Q1 only, then Q2–Q4 with defaults from existing config.
+- Contains **"status"** → Jump to Status Display (see below).
+- Contains **"pause"** → Jump to Schedule Management: pause.
+- Contains **"resume"** → Jump to Schedule Management: resume.
+- Contains **"remove"** → Jump to Account Removal.
+- Contains **"uninstall"** → Jump to Uninstall Guidance.
+- Contains **account:<name>** → Standard run: Steps 0C → 1–8.
+- **Default** (no qualifier) → If config exists: ask which account. If no config: run onboarding.
 
 ---
 
@@ -96,6 +130,12 @@ The onboarding is designed to be fast — 4 questions max. Everything else is au
 3. **"What Jira project key and billing code should I use for tickets?"** (only if Atlassian MCP is available)
    - User provides project key (e.g., DT) and billing code (e.g., 25000)
    - Or: "Skip Jira for now" — skill will still post Slack alerts without tickets
+   - **If Jira enabled, follow up with:**
+     - "Which CST team?" — needed for the CST custom field dropdown
+     - "Which client name in Jira?" — must match the Jira dropdown exactly
+   - Auto-resolve option IDs: call `getJiraIssueTypeMetaWithFields` with the project key
+     and issue type ID to look up CST and Client dropdown values. Present matches for confirmation.
+     If no match found, ask the user to type the exact dropdown label and save the option ID.
 
 4. **"Want this to run automatically? If so, what day and time?"**
    - User picks day + time (e.g., "Monday 11 AM")
@@ -123,13 +163,17 @@ billing_code_pld: <code or "TBD">
 cst: <CST team name>
 config_dir: <absolute path to the CLI installation directory>
 cli_path: outbound-feed-monitor
-scheduled: true | false
-schedule_cron: <cron expression>
+schedules:
+  <account_shortname>:
+    enabled: true | false
+    cron: <cron expression>
+    task_id: feed-check-<account_shortname>
 ```
 
 **One-time fields (never re-asked after onboarding):** `slack_target`, `slack_mode`,
-`billing_code_nonpld`, `billing_code_pld`, `cst`, `jira_project_key`, `config_dir`, `cli_path`,
-`schedule_cron`. Only surface these again if the user says "reconfigure" or "update billing codes".
+`billing_code_nonpld`, `billing_code_pld`, `cst`, `jira_project_key`, `config_dir`, `cli_path`.
+Per-account schedules are stored under `schedules.<shortname>`.
+Only surface these again if the user says "reconfigure" or "update billing codes".
 
 ### Step 0C — Skip Onboarding for Returning Users
 
@@ -188,9 +232,18 @@ This step is triggered by Step 0B question 1 (the user provides the email subjec
 - Automatically: if a table fails 2+ consecutive weeks, the skill asks "Is this expected?"
 - Manually: user says "add exception for [table]" at any time
 
-**Adding additional accounts later:** When a user already has a config and says
-"add account <name>" or runs the skill with an unknown account name, jump directly to Step 0D
-then ask only questions 2–4 from Step 0B (Slack, Jira, schedule) — reuse existing values as defaults.
+**After completing onboarding (all 4 questions answered):**
+- If the command was `/outbound-feed-monitor setup` → Save config only. Tell user: "Config saved.
+  Run `/outbound-feed-monitor account:<shortname>` when you're ready."
+- Otherwise → Ask: "Want me to run the feed check now, or just save the config for later?"
+  - "Run now" → Continue to Step 1.
+  - "Save for later" → Stop here. Config is saved and schedule is set.
+
+**Adding additional accounts later:** When a user says `/outbound-feed-monitor add`, "add account",
+or runs the skill with an unknown account name, jump directly to Step 0D then ask only
+questions 2–4 from Step 0B (Slack, Jira, schedule) — reuse existing values as defaults but let
+the user change them (a different account may route to a different Slack channel or use a different
+billing code).
 
 ---
 
@@ -458,6 +511,96 @@ Info: [known exceptions noted with action_note, or "None"]
 Slack alert: [channel/DM posted] ✓  (or "skipped — connector not available")
 Jira ticket: [KEY-XXX link] ✓  (or "comment added to existing" or "skipped")
 Schedule:    [<day> <time>] ✓  (or "not scheduled")
+```
+
+---
+
+## Status Display
+
+When the user runs `/outbound-feed-monitor status`:
+
+```
+📋 Outbound Feed Monitor — Status
+
+Accounts configured: <N>
+
+| Account | Cadence | Schedule | Status | Last Run |
+|---|---|---|---|---|
+| <shortname> | <cadence_day> | <cron readable> | ✅ Active / ⏸ Paused / — Not scheduled | <date or "never"> |
+
+Config location: <config_dir>
+CLI: <cli_path>
+Slack target: <channel or DM>
+Jira: <project_key> (enabled/disabled)
+```
+
+Read schedule status from `list_scheduled_tasks` matching `feed-check-*` task IDs.
+
+---
+
+## Schedule Management
+
+### Pause
+
+When the user runs `/outbound-feed-monitor pause [account]`:
+1. If account not specified and only one account exists, use that one.
+   If multiple accounts, ask which one.
+2. Call `update_scheduled_task` with `taskId: "feed-check-<shortname>"` and `enabled: false`.
+3. Update user config: set `schedules.<shortname>.enabled = false`.
+4. Tell user: "Paused. Feed check for <account> will not run until you resume it.
+   Run `/outbound-feed-monitor resume <account>` to re-enable."
+
+### Resume
+
+When the user runs `/outbound-feed-monitor resume [account]`:
+1. Resolve account (same logic as pause).
+2. Call `update_scheduled_task` with `taskId: "feed-check-<shortname>"` and `enabled: true`.
+3. Update user config: set `schedules.<shortname>.enabled = true`.
+4. Tell user: "Resumed. Next run: <next fire time from task>."
+
+---
+
+## Account Removal
+
+When the user runs `/outbound-feed-monitor remove <account>`:
+1. Confirm: "This will remove <account> from monitoring and disable its schedule. Continue?"
+2. If confirmed:
+   - Disable the scheduled task (if exists): `update_scheduled_task` with `enabled: false`
+   - Remove the account block from `references/account-configs.md`
+   - Remove the account shortname from `accounts` list in `references/user-config.md`
+   - Save both files to stable path and session cache
+3. Tell user: "Removed <account>. Schedule disabled. Config cleaned up."
+
+If removing the last account, also note: "No accounts remaining.
+Run `/outbound-feed-monitor add` to set up a new one."
+
+---
+
+## Uninstall Guidance
+
+When the user runs `/outbound-feed-monitor uninstall`:
+
+Do NOT auto-delete anything. Show the user what to clean up:
+
+```
+To fully remove the Outbound Feed Monitor:
+
+1. Disable all scheduled tasks:
+   <list each feed-check-* task with its taskId>
+
+2. Uninstall the Python CLI:
+   pip uninstall outbound-feed-monitor
+
+3. Remove the skill folder:
+   - Windows: del /s "%APPDATA%\Claude\skills\outbound-feed-monitor"
+   - Mac/Linux: rm -rf ~/.claude/skills/outbound-feed-monitor
+
+4. Remove your config directory (optional — keeps your credentials.json):
+   <config_dir>
+
+5. Revoke Gmail OAuth token (optional):
+   Delete token.json from <config_dir>, or revoke at
+   https://myaccount.google.com/permissions
 ```
 
 ---

@@ -79,23 +79,11 @@ estimate:
   four_plus_feeds:        "8h"
 ```
 
-## Onboarding Questions (asked during first-time setup)
+## Onboarding Flow
 
-When a new user runs the skill for the first time, collect:
-
-1. **Account name** — e.g. "Acme Pharma"
-2. **Brand** — e.g. "BrandX" (used for epic search and Slack messages)
-3. **CST** — which CST team? (select from your organization's team list)
-4. **Client** — which client in Jira? (must match the Jira dropdown exactly)
-5. **Billing code (Non-PLD)** — project code for Non-PLD maintenance tickets, or "TBD"
-6. **Billing code (PLD)** — project code for PLD maintenance tickets, or "TBD"
-7. **Slack channel** — where should failure alerts go? (default: #dataeng-support)
-8. **Jira board for testing** — optional alternative project key for initial test runs (default: DT)
-
-After collecting inputs, the skill should:
-- Search DT board epics using JQL to find and confirm the matching Non-PLD and PLD maintenance epics
-- Present the found epics to the user for confirmation before saving
-- Save the complete config
+Onboarding is handled by SKILL.md Steps 0A–0D. The skill asks 4 questions (email subject,
+Slack target, Jira config, schedule), then auto-detects everything else from a sample email.
+See SKILL.md for the full onboarding spec — do not duplicate the question list here.
 
 ## Jira Custom Field Reference
 
