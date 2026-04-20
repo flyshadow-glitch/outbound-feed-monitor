@@ -277,13 +277,12 @@ outbound-feed-monitor/
 
 | Feature | Status |
 |---|---|
-| Gmail OAuth + parsing + classification (CLI) | Done |
+| Gmail search + Chrome body reading + classification (Skill) | Done |
 | Rich terminal output (CLI) | Done |
 | Claude Skill — onboarding flow | Done |
 | Claude Skill — Jira ticket creation (DT board, full field mapping) | Done |
 | Claude Skill — Slack alerts (channel + thread reply) | Done |
 | Claude Skill — scheduled runs (day/time configurable) | Done |
-| `setup.py` CLI onboarding | Planned |
 | Multi-account simultaneous monitoring | Planned |
 | Billing code auto-sync with Genome | Planned |
 

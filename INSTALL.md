@@ -1,75 +1,32 @@
 # Installation Guide — Outbound Feed Monitor
 
-This guide walks you through installing and configuring the Outbound Feed Monitor skill in Claude Code. Once set up, the skill automatically checks your client outbound feed emails on a weekly schedule, creates Jira tickets for failures, and posts alerts to Slack.
+This guide walks you through installing the Outbound Feed Monitor skill in Claude Code.
+Once set up, the skill automatically checks your client outbound feed emails on a configurable
+schedule, creates Jira tickets for failures, and posts alerts to Slack.
+
+**No Python setup required. No API keys. No OAuth credentials.**
+The skill runs entirely through Claude Code connectors.
 
 ---
 
-## Prerequisites
+## Required Connectors
 
-1. **Claude Code** installed and running
-2. **Python 3.11+** — verify with `python --version`
-3. **MCP connectors** enabled for:
-   - **Gmail** — to read feed report emails
-   - **Slack** — to post alerts and DM summaries
-   - **Atlassian (Jira)** — to create tickets (optional — can add later)
-4. **Feed report emails** in your Gmail — you need access to the automated pipeline emails
-5. **`credentials.json`** for Gmail OAuth — see setup path below
+You need four connectors active in Claude Code before running the skill:
 
----
+| Connector | Purpose | How to add |
+|---|---|---|
+| **Gmail** | Search for feed report emails | Claude Code Settings → Connections → Gmail |
+| **Claude browser extension** | Read full email body content (Gmail MCP returns snippets only) | Install from Chrome Web Store: search "Claude browser companion" |
+| **Slack** | Post alerts to channel or DM | Claude Code Settings → Connections → Slack |
+| **Atlassian (Jira)** | Create tickets on the DT board | `claude mcp add atlassian https://mcp.atlassian.com/v1/mcp` — authenticate with an API token (not OAuth — more reliable for scheduled runs). Generate at: https://id.atlassian.com/manage-profile/security/api-tokens |
 
-## Gmail OAuth Setup (two paths)
-
-The Python CLI reads email bodies directly via the Gmail API (the MCP connector's body retrieval has a known bug). This requires a one-time OAuth setup.
-
-### Path A: You already have `credentials.json` from your team (most users)
-
-Your team admin has already created the Google Cloud project. You just need the shared `credentials.json` file.
-
-1. Get `credentials.json` from your team lead or shared drive
-2. Place it in the repo root (after cloning in Step 1)
-3. On first CLI run, a browser window opens — sign in with your Google account
-4. Done. A `token.json` is saved locally and auto-refreshes. No re-auth needed.
-
-### Path B: You're setting up from scratch (admin / first-time team setup)
-
-Follow the full [Google Cloud Setup guide in README.md](README.md#1-google-cloud-setup-gmail-oauth) to create a project and download `credentials.json`. This takes ~5 minutes and only needs to happen **once per team**. Share the resulting `credentials.json` with your team so they can use Path A.
-
-> **Security note:** `credentials.json` and `token.json` are in `.gitignore`. Never commit them. `credentials.json` is an app credential (safe to share within your team). `token.json` is your personal auth token (do not share).
+> **Jira is optional at setup.** You can skip it during onboarding and enable it later.
 
 ---
 
-## Step 1: Install the CLI
+## Step 1: Install the Skill
 
-```bash
-pip install git+https://github.com/flyshadow-glitch/outbound-feed-monitor.git
-```
-
-This installs the `outbound-feed-monitor` command system-wide. After this, you can call it from anywhere:
-
-```bash
-outbound-feed-monitor --account myaccount --json
-```
-
-> **For contributors / development:** clone the repo and use `pip install -e .` instead for editable mode.
-
----
-
-## Step 2: Set Up Your Working Directory
-
-Create a directory for your config files and place `credentials.json` in it:
-
-```bash
-mkdir outbound-feed-monitor && cd outbound-feed-monitor
-# Place credentials.json here (from Path A or B above)
-```
-
-On first CLI run, the browser will open for Google auth. After that, `token.json` is created automatically.
-
----
-
-## Step 3: Install the Skill
-
-Clone the repo (or just the `skill/` folder) and copy it to your Claude Code skills location:
+Clone the repo and copy the `skill/` folder to your Claude Code skills location:
 
 **Windows:**
 ```bash
@@ -83,11 +40,11 @@ git clone https://github.com/flyshadow-glitch/outbound-feed-monitor.git
 cp -r outbound-feed-monitor/skill ~/.claude/skills/outbound-feed-monitor
 ```
 
-Restart Claude Code (or reload skills) to pick up the new skill.
+Restart Claude Code to pick up the new skill.
 
 ---
 
-## Step 4: Run the Onboarding Flow
+## Step 2: Run the Onboarding Flow
 
 In Claude Code, type:
 
@@ -95,23 +52,23 @@ In Claude Code, type:
 /outbound-feed-monitor
 ```
 
-The skill will detect this is your first run and walk you through setup. You'll be asked:
+The skill detects this is your first run and walks you through setup. It asks 4 questions:
 
 | Step | What happens | Your input |
 |---|---|---|
-| MCP + CLI check | Auto-tests Gmail, Slack, Jira connectors and verifies `outbound-feed-monitor` is on PATH | Nothing — automatic |
+| Connector check | Auto-tests Gmail, Chrome, Slack, Jira | Nothing — automatic |
 | **Q1:** Email subject | You provide the subject line; skill searches Gmail and auto-detects account name, feed types, sender, cadence, email count | `Client - Account: Outbound Feed Report` |
 | **Q2:** Alert target | Slack channel or DM to you | `#your-alert-channel` or "DM me" |
 | **Q3:** Jira config | Project key + billing code (skill auto-finds epics on the DT board) | `DT` / `12345` |
 | **Q4:** Schedule | Day and time for automatic runs | `Monday 11 AM` |
 
-The skill saves your config locally in `references/account-configs.md`. This file is per-user and not committed to the repo.
+The skill saves your config in `references/account-configs.md` and `references/user-config.md`.
 
 ---
 
-## Step 5: Verify Your Setup
+## Step 3: Verify Your Setup
 
-After onboarding, run a manual check to verify everything works:
+After onboarding, run a manual check:
 
 ```
 /outbound-feed-monitor account:your_account
@@ -119,9 +76,10 @@ After onboarding, run a manual check to verify everything works:
 
 The skill will:
 1. Search your Gmail for today's feed report emails
-2. Parse and classify each feed
-3. If failures found: create a Jira ticket on the DT board and post to Slack
-4. If no failures: send you a DM confirming all clear
+2. Open each email in Chrome and parse the feed status table
+3. Classify each row (FAILURE / WARNING / INFO / ALL CLEAR)
+4. If failures found: create a Jira ticket and post to Slack
+5. If no failures: DM you confirming all clear
 
 ---
 
@@ -129,8 +87,9 @@ The skill will:
 
 Once scheduled, the skill runs automatically at your configured day and time:
 
-- **Failures detected** — creates a consolidated Jira ticket under the correct epic (PLD or Non-PLD Maintenance), posts a Slack message to #dataeng-support with a thread reply linking the ticket
+- **Failures detected** — creates a consolidated Jira ticket under the correct epic (PLD or Non-PLD), posts a Slack message with a thread reply linking the ticket
 - **No failures** — sends you a private Slack DM. No channel noise.
+- **Chrome not running** — sends you a DM to run the check manually
 
 ### Jira Ticket Details
 
@@ -155,35 +114,31 @@ Tickets are created with:
 
 ## Adding More Accounts
 
-To monitor additional client accounts, run:
+To monitor additional client accounts:
 
 ```
 /outbound-feed-monitor add
 ```
 
-The skill will ask for the new account's email subject line, auto-detect feed types from a sample email, then let you configure Slack, Jira, and scheduling. Each account gets its own schedule and config.
+The skill asks for the new account's email subject line, auto-detects feed types from a sample email,
+then lets you configure Slack, Jira, and scheduling. Each account gets its own schedule and config.
 
 ---
 
-## Python CLI
+## Lifecycle Commands
 
-The `outbound-feed-monitor` CLI (installed in Step 2) is the primary execution engine for scheduled runs. It also supports manual use:
-
-```bash
-# Interactive terminal output (rich formatting)
-outbound-feed-monitor --account myaccount
-
-# Machine-readable JSON (used by the skill and scheduled tasks)
-outbound-feed-monitor --account myaccount --json
-
-# Dry run — parse and display only, no Slack/Jira actions
-outbound-feed-monitor --account myaccount --dry-run
-
-# Run for a specific past date
-outbound-feed-monitor --account myaccount --date 2026-04-07
-```
-
-See [README.md](README.md) for full CLI reference.
+| Command | What it does |
+|---|---|
+| `/outbound-feed-monitor` | Run feed check (onboards if first time) |
+| `/outbound-feed-monitor account:<name>` | Run check for a specific account |
+| `/outbound-feed-monitor setup` | Configure only — no check |
+| `/outbound-feed-monitor reset` | Clear all config and restart onboarding |
+| `/outbound-feed-monitor add` | Add a new account |
+| `/outbound-feed-monitor status` | Show configured accounts and schedules |
+| `/outbound-feed-monitor pause [account]` | Disable scheduled task |
+| `/outbound-feed-monitor resume [account]` | Re-enable scheduled task |
+| `/outbound-feed-monitor remove <account>` | Remove account from monitoring |
+| `/outbound-feed-monitor uninstall` | Show cleanup steps |
 
 ---
 
@@ -191,10 +146,11 @@ See [README.md](README.md) for full CLI reference.
 
 | Issue | Fix |
 |---|---|
-| Jira MCP connector disconnected | Re-authenticate in Claude Code settings. OAuth can expire after idle hours. |
-| No emails found | Check that your Gmail has access to the feed report emails. Verify the sender email and subject line in your account config. |
+| Jira MCP connector disconnected | Re-authenticate in Claude Code settings. API tokens expire after 365 days max. |
+| No emails found | Verify the sender email and subject line in your account config. Check Gmail has access to the feed report emails. |
 | Wrong epic matched | Re-run onboarding and correct the brand or client name. The skill searches epics by `<Client> - <Brand> - [Non PLD/PLD] - Maintenance`. |
 | Skill not found after install | Restart Claude Code. Check the skill directory is in the correct location. |
+| Scheduled task DMs instead of posting | Chrome was not running when the task fired. Ensure Chrome is open with the Claude extension active on scheduled run days. |
 
 ---
 

@@ -67,27 +67,20 @@ Test each by calling a lightweight read-only operation:
 | Connector | Test call | Required? |
 |---|---|---|
 | **Gmail** | `search_threads` with `query: "newer_than:1d" pageSize: 1` | Yes — skill cannot function without it |
+| **Chrome** (Claude browser extension) | `navigate` to `https://mail.google.com` and check no error | Yes — used to read full email bodies (Gmail MCP returns snippets only) |
 | **Slack** | `slack_search_users` with the user's name | Yes for alerts |
 | **Jira/Atlassian** | `getAccessibleAtlassianResources` | Optional — can defer Jira to later |
 
 **If Gmail is missing:** Stop. Tell the user:
-"This skill requires the Gmail MCP connector. In Claude Code, go to Settings → MCP Servers and add
-the Gmail connector. Once connected, run this skill again."
+"This skill requires the Gmail MCP connector. In Claude Code Settings → Connections, add Gmail."
 
-**CLI availability check:** After MCP checks, verify the Python CLI is installed by running:
-```bash
-outbound-feed-monitor --help
-```
-- If the command succeeds: auto-set `cli_path = outbound-feed-monitor`. No question needed.
-- If the command fails: tell the user:
-  "The Python CLI is not installed. Run `pip install -e .` from your cloned repo directory,
-  then come back. See INSTALL.md for details."
-  Also ask: "What's the absolute path to your cloned repo?" → save as `config_dir`.
+**If Chrome connector is missing:** Stop. Tell the user:
+"This skill requires the Claude browser extension to read email body content. Install it from
+the Chrome Web Store, then come back. The Gmail MCP alone cannot return email body content."
 
 **Gmail body retrieval note:** The Gmail MCP's `get_thread FULL_CONTENT` does NOT return email body
-content (confirmed bug as of April 2026 — the tool returns headers and snippet only). The skill uses
-the Python CLI (`monitor.py --json`) as the primary path for email body reading. Chrome browser is the
-interactive fallback. Do NOT attempt to use `get_thread` for body parsing.
+content (confirmed bug as of April 2026). The skill reads email bodies by navigating Chrome to each
+Gmail thread URL and using `get_page_text`. No Python, no credentials.json, no OAuth setup required.
 
 **If Slack is missing:** Warn but continue:
 "Slack connector not found. I can still check feeds and display results, but I won't be able to post
@@ -161,8 +154,6 @@ jira_token_created: <YYYY-MM-DD or "unknown">
 billing_code_nonpld: <code or "TBD">
 billing_code_pld: <code or "TBD">
 cst: <CST team name>
-config_dir: <absolute path to the CLI installation directory>
-cli_path: outbound-feed-monitor
 schedules:
   <account_shortname>:
     enabled: true | false
@@ -171,7 +162,7 @@ schedules:
 ```
 
 **One-time fields (never re-asked after onboarding):** `slack_target`, `slack_mode`,
-`billing_code_nonpld`, `billing_code_pld`, `cst`, `client`, `jira_project_key`, `config_dir`, `cli_path`.
+`billing_code_nonpld`, `billing_code_pld`, `cst`, `client`, `jira_project_key`.
 Per-account schedules are stored under `schedules.<shortname>`.
 Only surface these again if the user says "reconfigure" or "update billing codes".
 
@@ -183,6 +174,7 @@ On every invocation, check for existing config in this order:
 
 If a config is found in either location, load it silently and copy to both locations if one is missing.
 Only ask for inputs that are missing or if the user explicitly says "reconfigure" or "change settings".
+
 
 **Force onboarding (testing / fresh install):** If the user runs `/outbound-feed-monitor setup`
 or `/outbound-feed-monitor reset`, ignore any existing config and restart from Step 0A.
@@ -291,57 +283,38 @@ pageSize: 20
 ## Step 3 — Read and Parse Each Email
 
 **⚠️ Do NOT use `get_thread FULL_CONTENT` for body reading.** The Gmail MCP returns headers and
-snippet only — no body content. This is a confirmed bug in the connector (April 2026).
+snippet only — this is a confirmed bug in the connector (April 2026). Use Chrome instead.
 
-### Primary path — Python CLI (headless-safe, works offline/scheduled)
+### Primary path — Chrome browser
 
-If `cli_path` is set in user config, run from `config_dir`:
-```bash
-cd <config_dir> && <cli_path> --account <account_shortname> --json
-```
+For each thread ID returned by Step 2:
 
-Parse the JSON output. The JSON schema:
-```json
-{
-  "account": "<Account Name>",
-  "account_shortname": "<shortname>",
-  "date": "YYYY-MM-DD",
-  "overall_severity": "FAILURE | WARNING | INFO | ALL_CLEAR",
-  "emails_found": 3,
-  "emails_expected": 3,
-  "feed_summaries": [
-    { "name": "DCM", "severity": "FAILURE", "file_count": 2,
-      "problem_tables": ["<client>_hcp_dcm"], "info_tables": [] }
-  ],
-  "problem_rows": [
-    { "file_name": "...", "status": "Failed", "source_table": "...",
-      "report_from": "YYYY-MM-DD", "report_to": "YYYY-MM-DD",
-      "row_count": 0, "null_columns": "", "feed_type": "DCM",
-      "severity": "FAILURE", "exception_reason": null }
-  ]
-}
-```
+1. Navigate to the Gmail thread:
+   ```
+   https://mail.google.com/mail/u/0/#all/<threadId>
+   ```
+2. Expand all messages in the thread (they may be collapsed in conversation view):
+   ```javascript
+   document.querySelector('button[aria-label="Expand all"]')?.click()
+   ```
+3. Call `get_page_text` to extract the full text content of the page.
+4. Parse the rows from the text using the column order:
+   `File Name | Status | Source Table | Report From | Report To | Number of Rows | Null Columns`
 
-Use `overall_severity` and `problem_rows` to drive Steps 4–6. Skip Steps 3 HTML parsing —
-the CLI handles all of that.
+**Parsing rules:**
+- Rows are identified by the pattern: `<FILENAME>.csv <Status> <source_table> <YYYY-MM-DD> <YYYY-MM-DD> <N> <null_val>`
+- Skip "Publisher Counts:" header lines and publisher breakdown sub-rows (lines containing "Row Count:" and "Distinct NPI_NUMBER:")
+- Skip UI chrome: "Reply", "Reply all", "Forward", "Add reaction", sender names, timestamps
+- Strip commas from row counts before converting to integer (e.g. "3,768" → 3768)
+- `Null Columns` values of `N/A`, `[]`, `[ ]`, or empty string all mean "no nulls"
+- All emails in the thread are visible after "Expand all" — parse all rows across all expanded messages
 
-**If the CLI returns a non-zero exit code:** Log the error in chat, fall back to Chrome path below.
-
-### Fallback path — Chrome browser (interactive sessions only)
-
-If `cli_path` is not set or CLI fails, and Chrome with the Claude extension is available:
-1. Navigate to Gmail in Chrome and open the email thread
-2. Use `get_page_text` to extract the full email body text
-3. Parse the text table manually using the field order:
-   File Name | Status | Source Table | Report From | Report To | Number of Rows | Null Columns
-
-Skip non-data rows:
-- Lines matching "Publisher Counts:" header — skip
-- Indented publisher breakdown lines (individual publisher names) — skip
-
-**If Chrome is not available and CLI is not set:** Block. Tell the user:
-"Email body cannot be read without either the Python CLI or the Chrome extension.
-To fix: set `cli_path` in your config pointing to monitor.py, or open Chrome with the Claude extension."
+**If Chrome is not available (scheduled task, Chrome not running):**
+Send the user a DM:
+"⚠️ Feed check for <account> could not complete — Chrome browser not available in this session.
+Please ensure Chrome is open with the Claude browser extension active when the scheduled task runs,
+or run `/outbound-feed-monitor account:<name>` manually."
+Then stop. Do not proceed to Steps 4–6 without parsed data.
 
 ---
 
@@ -479,20 +452,45 @@ Use `create_scheduled_task` with:
 
 ```
 Run the outbound feed monitor for account:<ACCOUNT>.
-Config dir: <config_dir>
-CLI path: <cli_path>
 
-1. Load config from <config_dir>/user-config.md and <config_dir>/account-configs.md.
-2. Run: cd <config_dir> && <cli_path> --account <account_shortname> --json
-   Parse the JSON output to get overall_severity and problem_rows.
-3. If FAILURE or WARNING:
-   - Post Slack alert to <notify_target> (channel_id: <slack_channel_id>)
-     Parent: ":thread1: <stream> | <client> | <brand> | <affected feeds>"
-   - Create Jira ticket in project <jira_project_key>
-     Use billing code: <billing_code_nonpld or billing_code_pld depending on stream>
-     Post ticket link as thread reply on Slack parent.
-4. If ALL CLEAR or INFO only: DM <user_slack_id> with confirmation.
-5. Post summary to chat.
+CONNECTORS REQUIRED: Gmail MCP, Chrome browser (Claude extension), Slack MCP, Jira MCP.
+Do NOT use get_thread for email bodies — known MCP bug, returns snippets only. Use Chrome.
+
+1. Load config from references/user-config.md and references/account-configs.md.
+
+2. Search Gmail for today's feed emails:
+   search_threads(query: 'subject:"<email_subject>" from:<sender_email> after:<today YYYY/MM/DD> before:<tomorrow YYYY/MM/DD>', pageSize: 20)
+   If 0 emails found: DM <user_slack_id> "⚠️ No feed emails found for <account> on <date>. Check the outbound pipeline." Then stop.
+
+3. For each thread ID found:
+   a. Navigate Chrome to: https://mail.google.com/mail/u/0/#all/<threadId>
+   b. Run JS: document.querySelector('button[aria-label="Expand all"]')?.click()
+   c. get_page_text → parse all rows in the format:
+      <FILENAME>.csv <Status> <source_table> <YYYY-MM-DD> <YYYY-MM-DD> <N,NNN> <null_val>
+   Skip Publisher Counts sub-rows (contain "Row Count:" and "Distinct NPI_NUMBER:").
+   
+   If Chrome is unavailable: DM <user_slack_id> "⚠️ Feed check for <account> could not run — Chrome not available. Open Chrome with Claude extension and re-run manually." Then stop.
+
+4. Classify each row (first match wins):
+   - source_table in known_exceptions AND condition matches → INFO
+   - status == "Failed" → FAILURE
+   - status == "Exported" AND row_count == 0 → WARNING
+   - status == "Exported" AND null_columns not in [N/A, [], empty] → WARNING
+   - status == "Exported" AND row_count > 0 → ALL CLEAR
+   Overall severity = worst across all rows.
+
+5. If FAILURE or WARNING:
+   a. Check for existing open DT ticket this week:
+      JQL: project = DT AND summary ~ "[<ACCOUNT> Outbound] Feed Export Failure" AND created >= startOfWeek() AND status != Done
+      If found: add comment. If not: create ticket with billing code <billing_code>, epic <epic_key>, labels [<labels>].
+   b. Post to Slack channel <slack_channel_id>:
+      Parent: ":thread1: <stream> | <client> | <brand> | <affected feed types>"
+      Thread reply: Jira ticket link.
+
+6. If ALL CLEAR or INFO only:
+   DM <user_slack_id>: "✅ No issues — <account> outbound feed clear on <date>. <N>/<expected> emails received."
+
+7. Post summary to chat.
 ```
 
 Tell the user: "Scheduled! Feed check will run at your configured time (<day> <time>).
