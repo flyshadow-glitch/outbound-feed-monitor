@@ -24,9 +24,6 @@ billing_code_nonpld: "71271"
 billing_code_pld: "71271"
 cst: Apex
 client: Abbott
-config_dir: C:\Working\outbound-feed-monitor
-cli_path: C:\New\python.exe C:\Working\outbound-feed-monitor\monitor.py
-python_path: C:\New\python.exe
 schedules:
   adc:
     enabled: true
