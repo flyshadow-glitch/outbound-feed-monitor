@@ -11,6 +11,61 @@ how many emails to expect, how to classify feed types, and where to route alerts
 <!-- Account configs are added automatically during onboarding (SKILL.md Step 0D). -->
 <!-- Each config block is created by analyzing a sample feed report email. -->
 
+## Config: Abbott ADC (`account:adc`)
+
+```
+account_name:         Abbott ADC
+account_shortname:    adc
+client_shortname:     abbott
+brand:                FreeStyle Libre
+
+email_subject:        Abbott - ADC: Outbound Feed Report
+sender_email:         analytics-de+airflow@klickcloud.net
+cadence_day:          Monday
+expected_email_count: 3   # Media (~14:05 UTC), PLD (~14:10), SEO (~14:35); Gmail may group them in one thread
+
+feed_types:
+  - name: Media (Non-PLD)
+    stream: Non-PLD
+    file_patterns:  [_GA_, _BING_, _DCM_, _DAYPART_]
+    table_patterns: [google_ads, bing_ads, dcm, daypart]
+    notes: GA + Bing run through Stitch; DCM through custom Klick APIs.
+  - name: PLD
+    stream: PLD
+    file_patterns:  [_PLD_]
+    table_patterns: [pld]
+  - name: SEO
+    stream: Non-PLD
+    file_patterns:  [_GSC_]
+    table_patterns: [gsc]
+
+known_exceptions:
+  - source_table: medscape_pld_abbott_adc
+    condition:    Failed OR 0 rows
+    severity:     INFO
+    reason:       Medscape PLD produces 0 rows in weeks with no active Medscape campaign.
+    action_note:  Confirm Medscape was inactive this week. If it was active, escalate as a real failure.
+
+client_email:
+  enabled:        true
+  signoff_name:   Edison
+
+slack:
+  production_channel_id: C02U1NTHUK1
+  production_channel:    "#dataeng-support"
+  test_user_id:          U059RTH6ZFC
+  thread_header:         ":thread1: ADC Outbound Issues:"
+
+jira:
+  production_project_key: DT
+  cloud_id:               dc266482-5597-4418-a075-890d22d0caf6
+  instance:               klickanalytics.atlassian.net
+  issue_type:             Task
+  labels:                 [abbott, adc, outbound-feed]
+```
+
+---
+
 ## Template — New Account
 
 The skill uses this template when writing a new account config. Do not remove it.
@@ -57,6 +112,10 @@ known_exceptions:
     severity:         INFO
     reason:           [Why this is expected]
     action_note:      [What the user should verify manually]
+
+client_email:
+  enabled:                true            # reply-all to the client on Failed rows (SKILL.md Step 4B)
+  signoff_name:           [Name to sign client emails with, e.g. "Edison"]
 
 slack:
   production_channel_id:  [Channel ID — resolve via slack_search_channels during setup]

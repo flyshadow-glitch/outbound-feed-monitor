@@ -256,6 +256,46 @@ Never proceed to Step 2 without a resolved account config.
 
 ---
 
+## Step 1B — Follow Up on Open Tickets from Previous Runs
+
+Runs on every check, before looking at this week's emails. Skip if `jira_enabled = false`.
+
+1. Find earlier tickets for this account that are not closed:
+   ```
+   project = <jira_project_key> AND labels = <account_shortname> AND labels = outbound-feed
+   AND created < startOfWeek() AND statusCategory != Done ORDER BY created DESC
+   ```
+   If none: nothing to follow up, continue to Step 2.
+2. For each ticket, gather the state:
+   - Jira (`getJiraIssue` with fields `status, assignee, updated, comment`): status, assignee, last update, latest comments.
+   - Slack thread: the permalink is in a ticket comment starting `Slack thread:` (added in Step 6C).
+     Read it with `slack_read_thread`. If no link is recorded, use the Jira data only.
+3. Decide who the ticket is waiting on, and act:
+
+| Situation | Waiting on | Action |
+|---|---|---|
+| No DE reply in thread and no assignee/comments on ticket | DE | Thread check-in asking for an owner and ETA |
+| DE replied but no fix/backfill confirmed yet | DE | Thread check-in asking for a status update and ETA, referencing the last update |
+| DE confirmed fix or backfill shared (Slack or Jira), ticket still open | Analytics | DM the user: QA the backfill, confirm delivery to the client, close the ticket |
+| Client delivery confirmed, ticket still open | Analytics | DM the user: ticket looks ready to close |
+
+   Slack messages are sent as the user, so analytics-side follow-ups go to the user's DM — never post
+   a reminder to yourself in the channel thread.
+
+**Thread check-in format** (reply in the original thread, `thread_ts` = parent ts):
+```
+Checking in on <KEY> (<status>, last update <date or "none">). <one line on what's outstanding, e.g. "DCM backfill for 10/24-10/30 not confirmed yet">. Any update or ETA?
+```
+
+**Analytics DM format:**
+```
+<KEY> is still <status>. <What DE reported and when>. Next step on our side: <QA backfill / confirm with client / close the ticket>. <ticket link>
+```
+
+Keep both to 2–3 lines, plain hyphens, no em dashes. List each follow-up in the Step 8 summary.
+
+---
+
 ## Step 2 — Search Gmail for Feed Emails
 
 Using values from the account config, call `search_threads`:
@@ -343,7 +383,35 @@ was active that week. If active, escalate — this is a real failure, not an exc
 **Overall account severity** = worst severity across all rows + email count check.
 If ALL CLEAR: post confirmation and stop. No Jira.
 If INFO only: post INFO note. No Jira.
-If WARNING or FAILURE: proceed to Steps 5 and 6.
+If WARNING or FAILURE: proceed to Steps 4B, 5 and 6.
+
+---
+
+## Step 4B — Notify the Client
+
+The client sees the same report email and will ask about failed files. Get ahead of them:
+reply on the report email before they do. Skip if `client_email.enabled = false` in the account config.
+
+**Send only when** 1+ rows have `status == "Failed"` and are not known exceptions. Do NOT email the
+client for WARNING-only results (0 rows / nulls on Exported files), INFO, ALL CLEAR, or missing report
+emails — handle those internally.
+
+1. **Check the thread first.** In the Gmail thread from Step 2, look for messages after the failing
+   report from anyone other than the pipeline sender:
+   - Someone at Klick (the user or a teammate) already replied about this failure → do not send. Note it in the summary.
+   - The client already asked → still send; open with a thanks instead of the proactive line.
+2. **Compose** from `references/client-email-template.md`: reply-all to the specific report message
+   that contains the failed rows (same recipients, subject `RE: <subject>`), short and human,
+   signed with `client_email.signoff_name`.
+3. **Send.** Use a Gmail send tool if one is connected (e.g. `send_message`/`send_email`, or
+   `create_draft` followed by `send_draft`), replying in the same thread.
+   If no send tool is available, create the reply as a draft in the thread with `create_draft`, then
+   DM the user: "Client reply for <account> is ready in Gmail drafts, please send: <thread link>".
+   Report in the Step 8 summary that the email was drafted, not sent, and that the Gmail connector
+   either doesn't offer sending or an org admin needs to allow the send tool.
+
+**Never include in client emails:** Jira keys or links, Slack links, billing codes, internal team names,
+or guesses about root cause. Only name the failed files and say what happens next.
 
 ---
 
@@ -430,6 +498,8 @@ If not cached, call `getJiraIssueTypeMetaWithFields` with `projectIdOrKey: "DT"`
 to find them, then save to config.
 
 After ticket is created, post the Jira link as a thread reply on the Slack parent message.
+Then add a Jira comment `Slack thread: <parent message permalink>` — Step 1B uses it next week
+to find the thread.
 
 ### 6D — Jira Not Available Fallback
 
@@ -458,6 +528,11 @@ Do NOT use get_thread for email bodies — known MCP bug, returns snippets only.
 
 1. Load config from references/user-config.md and references/account-configs.md.
 
+1b. Follow up on earlier tickets (SKILL.md Step 1B):
+   JQL: project = DT AND labels = <account_shortname> AND labels = outbound-feed AND created < startOfWeek() AND statusCategory != Done
+   For each: read status/comments, find the "Slack thread:" comment, read the thread.
+   Waiting on DE → check-in reply in that Slack thread. Waiting on Analytics (fix confirmed, ticket open) → DM <user_slack_id>.
+
 2. Search Gmail for today's feed emails:
    search_threads(query: 'subject:"<email_subject>" from:<sender_email> after:<today YYYY/MM/DD> before:<tomorrow YYYY/MM/DD>', pageSize: 20)
    If 0 emails found: DM <user_slack_id> "⚠️ No feed emails found for <account> on <date>. Check the outbound pipeline." Then stop.
@@ -479,18 +554,23 @@ Do NOT use get_thread for email bodies — known MCP bug, returns snippets only.
    - status == "Exported" AND row_count > 0 → ALL CLEAR
    Overall severity = worst across all rows.
 
-5. If FAILURE or WARNING:
+5. If any non-exception row is Failed: reply-all on that report email to the client (SKILL.md Step 4B,
+   references/client-email-template.md). Skip if a Klick teammate already replied. Send directly;
+   if no Gmail send tool exists, save as a draft in the thread and DM <user_slack_id> to send it.
+
+6. If FAILURE or WARNING:
    a. Check for existing open DT ticket this week:
       JQL: project = DT AND summary ~ "[<ACCOUNT> Outbound] Feed Export Failure" AND created >= startOfWeek() AND status != Done
       If found: add comment. If not: create ticket with billing code <billing_code>, epic <epic_key>, labels [<labels>].
    b. Post to Slack channel <slack_channel_id>:
       Parent: ":thread1: <stream> | <client> | <brand> | <affected feed types>"
       Thread reply: Jira ticket link.
+   c. Add Jira comment "Slack thread: <parent permalink>".
 
-6. If ALL CLEAR or INFO only:
+7. If ALL CLEAR or INFO only:
    DM <user_slack_id>: "✅ No issues — <account> outbound feed clear on <date>. <N>/<expected> emails received."
 
-7. Post summary to chat.
+8. Post summary to chat.
 ```
 
 Tell the user: "Scheduled! Feed check will run at your configured time (<day> <time>).
@@ -508,6 +588,8 @@ Failures: [list affected feed types + source tables, or "None"]
 Warnings: [list or "None"]
 Info: [known exceptions noted with action_note, or "None"]
 
+Follow-ups:  [<KEY> — checked in with DE / DM'd you to close, or "None open"]
+Client email: [sent ✓ / drafted — please send / skipped: teammate already replied / not needed]
 Slack alert: [channel/DM posted] ✓  (or "skipped — connector not available")
 Jira ticket: [KEY-XXX link] ✓  (or "comment added to existing" or "skipped")
 Schedule:    [<day> <time>] ✓  (or "not scheduled")
@@ -624,3 +706,7 @@ To fully remove the Outbound Feed Monitor:
 - Never use `get_thread FULL_CONTENT` for email body content — it returns no body (MCP bug). Use CLI or Chrome.
 - The Jira MCP parameter for custom fields is `additional_fields` (not `additionalFields`).
 - Always write config to both the stable `config_dir` path AND the session `references/` cache.
+- Client emails go out only for Failed rows (not known exceptions), only as a reply-all on the report
+  email, and never contain Jira/Slack links, billing codes, or root-cause guesses.
+- Never send a second client email for the same failure if a Klick teammate already replied in the thread.
+- Follow-up reminders that need the user's own action go to their DM, not the channel thread.
